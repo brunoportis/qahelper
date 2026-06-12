@@ -276,7 +276,7 @@ def session_type() -> str:
 
 
 def portal_screenshot_command(
-    destination: Path, window: bool, delay: float
+    destination: Path, interactive: bool, delay: float
 ) -> list[str] | None:
     portal_helper = Path(__file__).with_name("portal_screenshot.py")
     if not (
@@ -287,8 +287,8 @@ def portal_screenshot_command(
         return None
 
     command = ["/usr/bin/python3", str(portal_helper), str(destination)]
-    if window:
-        command.append("--window")
+    if interactive:
+        command.append("--interactive")
     if delay:
         command.extend(["--delay", str(delay)])
     return command
@@ -313,10 +313,26 @@ def x11_window_command(destination: Path) -> list[str]:
 
 
 def capture_screenshot(
-    destination: Path, window: bool = False, delay: float = 0
+    destination: Path,
+    window: bool = False,
+    delay: float = 0,
+    gui: bool = False,
 ) -> None:
     current_session = session_type()
-    portal_command = portal_screenshot_command(destination, window, delay)
+    portal_command = portal_screenshot_command(
+        destination,
+        interactive=gui or (window and current_session == "wayland"),
+        delay=delay,
+    )
+
+    if gui:
+        if not portal_command:
+            raise CliError(
+                "O seletor gráfico requer GNOME com xdg-desktop-portal e "
+                "python3-gi instalados."
+            )
+        subprocess.run(portal_command, check=True)
+        return
 
     if current_session == "wayland" and portal_command:
         subprocess.run(portal_command, check=True)
@@ -353,7 +369,11 @@ def capture_screenshot(
 
 
 def add_screenshot(
-    order: int | None, start: Path, window: bool = False, delay: float = 0
+    order: int | None,
+    start: Path,
+    window: bool = False,
+    delay: float = 0,
+    gui: bool = False,
 ) -> Path:
     root = find_project_root(start)
     scenario = active_scenario(root)
@@ -366,7 +386,7 @@ def add_screenshot(
         raise CliError(f"Já existe um screenshot com a ordem {screenshot_order}: {destination}")
 
     try:
-        capture_screenshot(destination, window=window, delay=delay)
+        capture_screenshot(destination, window=window, delay=delay, gui=gui)
     except subprocess.CalledProcessError as error:
         destination.unlink(missing_ok=True)
         raise CliError(f"Não foi possível capturar o screenshot: {error}") from error
@@ -428,7 +448,14 @@ def add_screenshot_command(
         bool,
         typer.Option(
             "--window",
-            help="Abre o seletor para capturar uma janela específica",
+            help="Captura a janela focada ou abre o seletor quando necessário",
+        ),
+    ] = False,
+    gui: Annotated[
+        bool,
+        typer.Option(
+            "--gui",
+            help="Abre o seletor gráfico nativo do GNOME",
         ),
     ] = False,
     delay: Annotated[
@@ -440,7 +467,7 @@ def add_screenshot_command(
     try:
         if delay < 0:
             raise CliError("--delay não pode ser negativo.")
-        add_screenshot(order, Path.cwd(), window=window, delay=delay)
+        add_screenshot(order, Path.cwd(), window=window, delay=delay, gui=gui)
     except CliError as error:
         exit_with_error(error)
 

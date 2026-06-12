@@ -99,16 +99,26 @@ Set the evidence order explicitly:
 qahelper qa scenario add-screenshot --order 3
 ```
 
-Open the native screenshot selector to capture a specific window:
+Capture the focused window directly when supported:
 
 ```bash
 qahelper qa scenario add-screenshot --window
 ```
 
+Open the native GNOME screenshot selector explicitly:
+
+```bash
+qahelper qa scenario add-screenshot --gui
+```
+
+On Wayland, `--window` also uses the graphical selector because GNOME requires
+interactive permission. On X11, `--window` captures the focused window
+directly, while `--gui` opens the selector.
+
 Wait before starting the capture:
 
 ```bash
-qahelper qa scenario add-screenshot --window --delay 5
+qahelper qa scenario add-screenshot --gui --delay 5
 ```
 
 Screenshots are stored as `001.png`, `002.png` and so on inside the active
@@ -125,7 +135,7 @@ Settings > Keyboard > View and Customize Shortcuts > Custom Shortcuts
 Create a shortcut named `QA Screenshot` with:
 
 ```bash
-bash -lc 'cd "$HOME/QA" && qahelper qa scenario add-screenshot --window --delay 2'
+bash -lc 'cd "$HOME/QA" && qahelper qa scenario add-screenshot --gui --delay 2'
 ```
 
 Replace `$HOME/QA` with the directory where scenarios should be stored. Start

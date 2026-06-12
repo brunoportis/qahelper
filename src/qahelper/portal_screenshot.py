@@ -96,14 +96,14 @@ def capture(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("destination", type=Path)
-    parser.add_argument("--window", action="store_true")
+    parser.add_argument("--interactive", action="store_true")
     parser.add_argument("--delay", type=float, default=0)
     args = parser.parse_args()
     try:
         if args.delay:
             print(f"Captura em {args.delay:g} segundos...", flush=True)
             time.sleep(args.delay)
-        capture(args.destination, interactive=args.window)
+        capture(args.destination, interactive=args.interactive)
     except Exception as error:
         print(error, file=sys.stderr)
         return 1

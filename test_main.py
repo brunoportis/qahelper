@@ -45,9 +45,10 @@ class ScenarioCliTest(unittest.TestCase):
             scenario = main.start_scenario("Lead sem conta", root)
             (scenario / "001.png").touch()
 
-            def create_screenshot(destination, window=False, delay=0):
+            def create_screenshot(destination, window=False, delay=0, gui=False):
                 self.assertFalse(window)
                 self.assertEqual(delay, 0)
+                self.assertFalse(gui)
                 destination.touch()
 
             with patch.object(
@@ -62,9 +63,10 @@ class ScenarioCliTest(unittest.TestCase):
             root = Path(directory)
             scenario = main.start_scenario("Lead sem conta", root)
 
-            def create_screenshot(destination, window=False, delay=0):
+            def create_screenshot(destination, window=False, delay=0, gui=False):
                 self.assertTrue(window)
                 self.assertEqual(delay, 2.5)
+                self.assertFalse(gui)
                 destination.touch()
 
             with patch.object(
@@ -138,7 +140,32 @@ class ScenarioCliTest(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertEqual(command[0], "/usr/bin/python3")
         self.assertIn("portal_screenshot.py", command[1])
-        self.assertEqual(command[2:], [str(destination), "--window", "--delay", "1"])
+        self.assertEqual(
+            command[2:],
+            [str(destination), "--interactive", "--delay", "1"],
+        )
+
+    def test_gui_uses_portal_on_x11(self):
+        destination = Path("/tmp/window.png")
+        environment = {
+            "XDG_SESSION_TYPE": "x11",
+            "DISPLAY": ":0",
+            "XDG_CURRENT_DESKTOP": "ubuntu:GNOME",
+        }
+
+        with (
+            patch.dict(os.environ, environment, clear=True),
+            patch.object(main.subprocess, "run") as run,
+        ):
+            main.capture_screenshot(destination, gui=True, delay=2)
+
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], "/usr/bin/python3")
+        self.assertIn("portal_screenshot.py", command[1])
+        self.assertEqual(
+            command[2:],
+            [str(destination), "--interactive", "--delay", "2"],
+        )
 
     def test_explicit_order_cannot_overwrite_file(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -218,6 +245,13 @@ class ScenarioCliTest(unittest.TestCase):
         self.assertIn("current", result.stdout)
         self.assertIn("dashboard", result.stdout)
         self.assertIn("add-screenshot", result.stdout)
+
+        screenshot_help = self.runner.invoke(
+            main.app,
+            ["qa", "scenario", "add-screenshot", "--help"],
+        )
+        self.assertEqual(screenshot_help.exit_code, 0)
+        self.assertIn("--gui", screenshot_help.stdout)
 
     def test_typer_start_command_creates_scenario(self):
         with tempfile.TemporaryDirectory() as directory:
