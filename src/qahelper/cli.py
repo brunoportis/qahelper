@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 import unicodedata
 from pathlib import Path
 from typing import Annotated
@@ -252,28 +253,102 @@ def screenshot_command(destination: Path) -> list[str]:
     )
 
 
-def capture_screenshot(
-    destination: Path, window: bool = False, delay: float = 0
-) -> None:
-    desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
+def desktop_environment() -> str:
+    return ":".join(
+        filter(
+            None,
+            (
+                os.environ.get("XDG_CURRENT_DESKTOP"),
+                os.environ.get("XDG_SESSION_DESKTOP"),
+                os.environ.get("DESKTOP_SESSION"),
+            ),
+        )
+    ).lower()
+
+
+def session_type() -> str:
+    configured = os.environ.get("XDG_SESSION_TYPE", "").lower()
+    if os.environ.get("WAYLAND_DISPLAY") or configured == "wayland":
+        return "wayland"
+    if os.environ.get("DISPLAY") or configured in {"x11", "xorg"}:
+        return "x11"
+    return "unknown"
+
+
+def portal_screenshot_command(
+    destination: Path, window: bool, delay: float
+) -> list[str] | None:
     portal_helper = Path(__file__).with_name("portal_screenshot.py")
-    if (
-        os.environ.get("WAYLAND_DISPLAY")
-        and "gnome" in desktop
+    if not (
+        "gnome" in desktop_environment()
         and Path("/usr/bin/python3").is_file()
         and portal_helper.is_file()
     ):
-        command = ["/usr/bin/python3", str(portal_helper), str(destination)]
-        if window:
-            command.append("--window")
+        return None
+
+    command = ["/usr/bin/python3", str(portal_helper), str(destination)]
+    if window:
+        command.append("--window")
+    if delay:
+        command.extend(["--delay", str(delay)])
+    return command
+
+
+def x11_window_command(destination: Path) -> list[str]:
+    candidates = (
+        (
+            "gnome-screenshot",
+            ["gnome-screenshot", "--window", "--file", str(destination)],
+        ),
+        ("scrot", ["scrot", "--focused", str(destination)]),
+        ("import", ["import", str(destination)]),
+    )
+    for executable, command in candidates:
+        if shutil.which(executable):
+            return command
+    raise CliError(
+        "Nenhuma ferramenta para captura de janela encontrada no X11. "
+        "Instale gnome-screenshot, scrot ou ImageMagick."
+    )
+
+
+def capture_screenshot(
+    destination: Path, window: bool = False, delay: float = 0
+) -> None:
+    current_session = session_type()
+    portal_command = portal_screenshot_command(destination, window, delay)
+
+    if current_session == "wayland" and portal_command:
+        subprocess.run(portal_command, check=True)
+        return
+
+    if current_session == "x11":
         if delay:
-            command.extend(["--delay", str(delay)])
+            print(f"Captura em {delay:g} segundos...", flush=True)
+            time.sleep(delay)
+        command = x11_window_command(destination) if window else screenshot_command(destination)
         subprocess.run(command, check=True)
         return
+
+    if portal_command:
+        subprocess.run(portal_command, check=True)
+        return
+
+    if window and current_session == "wayland":
+        raise CliError(
+            "O compositor Wayland atual não oferece captura de janela pelo portal. "
+            "No GNOME, confirme que xdg-desktop-portal-gnome está instalado."
+        )
+
     if window:
         raise CliError(
-            "A captura de janela específica ainda está disponível apenas no GNOME/Wayland."
+            "Não foi possível identificar a sessão gráfica para capturar uma janela. "
+            "Verifique XDG_SESSION_TYPE, WAYLAND_DISPLAY e DISPLAY."
         )
+
+    if delay:
+        print(f"Captura em {delay:g} segundos...", flush=True)
+        time.sleep(delay)
     subprocess.run(screenshot_command(destination), check=True)
 
 

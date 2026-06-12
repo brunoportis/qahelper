@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -74,6 +75,70 @@ class ScenarioCliTest(unittest.TestCase):
                 )
 
             self.assertEqual(screenshot, scenario / "001.png")
+
+    def test_desktop_environment_uses_ubuntu_session_variables(self):
+        environment = {
+            "XDG_SESSION_DESKTOP": "ubuntu",
+            "DESKTOP_SESSION": "ubuntu-wayland",
+            "XDG_CURRENT_DESKTOP": "ubuntu:GNOME",
+        }
+
+        with patch.dict(os.environ, environment, clear=True):
+            self.assertIn("gnome", main.desktop_environment())
+
+    def test_x11_window_uses_gnome_screenshot_and_delay(self):
+        destination = Path("/tmp/window.png")
+        environment = {
+            "XDG_SESSION_TYPE": "x11",
+            "DISPLAY": ":0",
+            "XDG_CURRENT_DESKTOP": "ubuntu:GNOME",
+        }
+
+        with (
+            patch.dict(os.environ, environment, clear=True),
+            patch.object(
+                main.shutil,
+                "which",
+                side_effect=lambda executable: (
+                    f"/usr/bin/{executable}"
+                    if executable == "gnome-screenshot"
+                    else None
+                ),
+            ),
+            patch.object(main.time, "sleep") as sleep,
+            patch.object(main.subprocess, "run") as run,
+        ):
+            main.capture_screenshot(destination, window=True, delay=2)
+
+        sleep.assert_called_once_with(2)
+        run.assert_called_once_with(
+            [
+                "gnome-screenshot",
+                "--window",
+                "--file",
+                str(destination),
+            ],
+            check=True,
+        )
+
+    def test_wayland_gnome_uses_portal_from_session_desktop(self):
+        destination = Path("/tmp/window.png")
+        environment = {
+            "XDG_SESSION_TYPE": "wayland",
+            "WAYLAND_DISPLAY": "wayland-0",
+            "XDG_SESSION_DESKTOP": "gnome",
+        }
+
+        with (
+            patch.dict(os.environ, environment, clear=True),
+            patch.object(main.subprocess, "run") as run,
+        ):
+            main.capture_screenshot(destination, window=True, delay=1)
+
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], "/usr/bin/python3")
+        self.assertIn("portal_screenshot.py", command[1])
+        self.assertEqual(command[2:], [str(destination), "--window", "--delay", "1"])
 
     def test_explicit_order_cannot_overwrite_file(self):
         with tempfile.TemporaryDirectory() as directory:

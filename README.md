@@ -15,6 +15,8 @@ provides a Rich-powered dashboard for reviewing the collected evidence.
 Screenshot support depends on the desktop environment:
 
 - GNOME on Wayland uses the native screenshot portal.
+- GNOME on X11, including Ubuntu 22.04 sessions, can use
+  `gnome-screenshot`, `scrot` or ImageMagick.
 - Other Wayland compositors can use `grim`.
 - X11 can use `gnome-screenshot`, `scrot` or ImageMagick's `import`.
 
@@ -128,6 +130,32 @@ bash -lc 'cd "$HOME/QA" && qahelper qa scenario add-screenshot --window --delay 
 
 Replace `$HOME/QA` with the directory where scenarios should be stored. Start
 at least one scenario from that directory before using the shortcut.
+
+## Ubuntu 22.04 troubleshooting
+
+Ubuntu 22.04 can run GNOME with either Wayland or X11. Check the current
+session with:
+
+```bash
+printf 'session=%s desktop=%s display=%s wayland=%s\n' \
+  "$XDG_SESSION_TYPE" "$XDG_CURRENT_DESKTOP" "$DISPLAY" "$WAYLAND_DISPLAY"
+```
+
+For GNOME on X11, install the native screenshot command if it is missing:
+
+```bash
+sudo apt install gnome-screenshot
+```
+
+For GNOME on Wayland, make sure the desktop portal and Python GObject bindings
+are installed:
+
+```bash
+sudo apt install xdg-desktop-portal xdg-desktop-portal-gnome python3-gi
+```
+
+After updating `qahelper` from a Git repository, reinstall it with the same
+source URL and `--force` so that `uv` replaces the existing tool.
 
 ## Data layout
 
