@@ -154,8 +154,11 @@ printf 'session=%s desktop=%s display=%s wayland=%s\n' \
 For GNOME on X11, install the native screenshot command if it is missing:
 
 ```bash
-sudo apt install gnome-screenshot
+sudo apt install gnome-screenshot xdotool
 ```
+
+`xdotool` lets `--gui` open the same GNOME Shell overlay used by the
+PrintScreen key. The resulting PNG is also copied into the active scenario.
 
 For GNOME on Wayland, make sure the desktop portal and Python GObject bindings
 are installed:

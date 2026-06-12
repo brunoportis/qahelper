@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 import unicodedata
 from pathlib import Path
@@ -294,6 +295,24 @@ def portal_screenshot_command(
     return command
 
 
+def native_gnome_screenshot_command(
+    destination: Path, delay: float
+) -> list[str] | None:
+    helper = Path(__file__).with_name("native_screenshot.py")
+    if not (
+        "gnome" in desktop_environment()
+        and session_type() == "x11"
+        and shutil.which("xdotool")
+        and helper.is_file()
+    ):
+        return None
+
+    command = [sys.executable, str(helper), str(destination)]
+    if delay:
+        command.extend(["--delay", str(delay)])
+    return command
+
+
 def x11_window_command(destination: Path) -> list[str]:
     candidates = (
         (
@@ -319,6 +338,7 @@ def capture_screenshot(
     gui: bool = False,
 ) -> None:
     current_session = session_type()
+    native_command = native_gnome_screenshot_command(destination, delay)
     portal_command = portal_screenshot_command(
         destination,
         interactive=gui or (window and current_session == "wayland"),
@@ -326,10 +346,13 @@ def capture_screenshot(
     )
 
     if gui:
+        if native_command:
+            subprocess.run(native_command, check=True)
+            return
         if not portal_command:
             raise CliError(
-                "O seletor gráfico requer GNOME com xdg-desktop-portal e "
-                "python3-gi instalados."
+                "O seletor gráfico requer xdotool no GNOME/X11 ou "
+                "xdg-desktop-portal e python3-gi no GNOME/Wayland."
             )
         subprocess.run(portal_command, check=True)
         return

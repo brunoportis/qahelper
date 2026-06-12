@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import qahelper.cli as main
+import qahelper.native_screenshot as native_screenshot
 from rich.console import Console
 from typer.testing import CliRunner
 
@@ -155,6 +156,7 @@ class ScenarioCliTest(unittest.TestCase):
 
         with (
             patch.dict(os.environ, environment, clear=True),
+            patch.object(main.shutil, "which", return_value=None),
             patch.object(main.subprocess, "run") as run,
         ):
             main.capture_screenshot(destination, gui=True, delay=2)
@@ -166,6 +168,48 @@ class ScenarioCliTest(unittest.TestCase):
             command[2:],
             [str(destination), "--interactive", "--delay", "2"],
         )
+
+    def test_gui_uses_native_printscreen_ui_on_x11(self):
+        destination = Path("/tmp/window.png")
+        environment = {
+            "XDG_SESSION_TYPE": "x11",
+            "DISPLAY": ":0",
+            "XDG_CURRENT_DESKTOP": "ubuntu:GNOME",
+        }
+
+        with (
+            patch.dict(os.environ, environment, clear=True),
+            patch.object(
+                main.shutil,
+                "which",
+                side_effect=lambda executable: (
+                    "/usr/bin/xdotool" if executable == "xdotool" else None
+                ),
+            ),
+            patch.object(main.subprocess, "run") as run,
+        ):
+            main.capture_screenshot(destination, gui=True, delay=2)
+
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], main.sys.executable)
+        self.assertIn("native_screenshot.py", command[1])
+        self.assertEqual(command[2:], [str(destination), "--delay", "2"])
+
+    def test_native_screenshot_detects_new_png(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            old = root / "old.png"
+            new = root / "Screenshots/new.png"
+            old.touch()
+            before = native_screenshot.png_snapshot(root)
+            new.parent.mkdir()
+            new.write_bytes(b"png")
+
+            detected = native_screenshot.wait_for_screenshot(
+                root, before, timeout_seconds=0.1
+            )
+
+            self.assertEqual(detected, new)
 
     def test_explicit_order_cannot_overwrite_file(self):
         with tempfile.TemporaryDirectory() as directory:
